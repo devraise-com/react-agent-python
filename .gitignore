@@ -30,6 +30,9 @@ coverage.xml
 # Runtime data (state files created by mock services)
 data/*.json
 
+# Log files
+*.log
+
 # IDE
 .idea/
 .vscode/
