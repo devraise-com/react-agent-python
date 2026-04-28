@@ -77,6 +77,19 @@ def test_slack_force_error(tmp_path: Path) -> None:
     assert exc_info.value.code == ErrorCode.RATE_LIMIT
 
 
+def test_slack_force_error_consumed_after_first_matching_call(tmp_path: Path) -> None:
+    inj = ErrorInjector(0.0, "slack:rate_limit")
+    svc = SlackService(JsonStore(tmp_path / "s.json", SLACK_DEFAULTS), inj)
+
+    with pytest.raises(MockServiceError) as exc_info:
+        svc.list_channels()
+    assert exc_info.value.code == ErrorCode.RATE_LIMIT
+
+    # Second call should succeed because force error is one-shot.
+    result = svc.list_channels()
+    assert result["ok"] is True
+
+
 def test_slack_force_error_other_service_not_affected(tmp_path: Path) -> None:
     inj = ErrorInjector(0.0, "jira:not_found")
     svc = SlackService(JsonStore(tmp_path / "s.json", SLACK_DEFAULTS), inj)

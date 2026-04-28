@@ -37,6 +37,8 @@ class ErrorInjector:
         if self._force_error:
             parts = self._force_error.split(":", 1)
             if len(parts) == 2 and parts[0] == service:
+                # Consume one-shot forced error on first matching call.
+                self._force_error = ""
                 try:
                     code = ErrorCode(parts[1])
                 except ValueError:
