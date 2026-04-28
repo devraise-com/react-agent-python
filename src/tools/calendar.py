@@ -3,13 +3,24 @@
 from typing import Any
 
 from src.mock_services.calendar_service import CalendarService
+from src.tools.models import (
+    CalendarCreateEventParams,
+    CalendarCreateEventResult,
+    CalendarFreeSlotParams,
+    CalendarFreeSlotResult,
+    CalendarListEventsParams,
+    CalendarListEventsResult,
+)
 from src.tools.registry import ToolRegistry
 
 
 def register_calendar_tools(service: CalendarService, registry: ToolRegistry) -> None:
     """Register all Calendar tools into the given registry."""
 
-    @registry.register
+    @registry.register(
+        params_model=CalendarCreateEventParams,
+        result_model=CalendarCreateEventResult,
+    )
     def calendar_create_event(
         title: str,
         start: str,
@@ -23,14 +34,20 @@ def register_calendar_tools(service: CalendarService, registry: ToolRegistry) ->
         """
         return service.create_event(title, start, end, attendees, description)
 
-    @registry.register
+    @registry.register(
+        params_model=CalendarListEventsParams,
+        result_model=CalendarListEventsResult,
+    )
     def calendar_list_events(start: str, end: str) -> dict[str, Any]:
         """List calendar events within a time range.
         start and end must be ISO 8601 datetime strings.
         """
         return service.list_events(start, end)
 
-    @registry.register
+    @registry.register(
+        params_model=CalendarFreeSlotParams,
+        result_model=CalendarFreeSlotResult,
+    )
     def calendar_find_free_slot(
         duration_minutes: int, after: str, before: str
     ) -> dict[str, Any]:

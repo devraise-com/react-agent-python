@@ -3,13 +3,22 @@
 from typing import Any
 
 from src.mock_services.jira_service import JiraService
+from src.tools.models import (
+    JiraCreateIssueParams,
+    JiraGetIssueParams,
+    JiraIssueResult,
+    JiraTransitionIssueParams,
+)
 from src.tools.registry import ToolRegistry
 
 
 def register_jira_tools(service: JiraService, registry: ToolRegistry) -> None:
     """Register all Jira tools into the given registry."""
 
-    @registry.register
+    @registry.register(
+        params_model=JiraCreateIssueParams,
+        result_model=JiraIssueResult,
+    )
     def jira_create_issue(
         summary: str,
         description: str = "",
@@ -23,12 +32,15 @@ def register_jira_tools(service: JiraService, registry: ToolRegistry) -> None:
         """
         return service.create_issue(summary, description, assignee, priority)
 
-    @registry.register
+    @registry.register(params_model=JiraGetIssueParams, result_model=JiraIssueResult)
     def jira_get_issue(key: str) -> dict[str, Any]:
         """Fetch a Jira issue by its key (e.g. PRJ-1)."""
         return service.get_issue(key)
 
-    @registry.register
+    @registry.register(
+        params_model=JiraTransitionIssueParams,
+        result_model=JiraIssueResult,
+    )
     def jira_transition_issue(
         key: str, status: str, assignee: str | None = None
     ) -> dict[str, Any]:

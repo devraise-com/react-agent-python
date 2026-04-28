@@ -3,25 +3,38 @@
 from typing import Any
 
 from src.mock_services.slack_service import SlackService
+from src.tools.models import (
+    SlackListChannelsResult,
+    SlackSearchMessagesParams,
+    SlackSearchMessagesResult,
+    SlackSendMessageParams,
+    SlackSendMessageResult,
+)
 from src.tools.registry import ToolRegistry
 
 
 def register_slack_tools(service: SlackService, registry: ToolRegistry) -> None:
     """Register all Slack tools into the given registry."""
 
-    @registry.register
+    @registry.register(
+        params_model=SlackSendMessageParams,
+        result_model=SlackSendMessageResult,
+    )
     def slack_send_message(channel: str, text: str, user: str = "agent") -> dict[str, Any]:
         """Send a message to a Slack channel.
         Use the channel name with or without the # prefix (e.g. #engineering or engineering).
         """
         return service.send_message(channel, text, user)
 
-    @registry.register
+    @registry.register(result_model=SlackListChannelsResult)
     def slack_list_channels() -> dict[str, Any]:
         """List all available Slack channels in the workspace."""
         return service.list_channels()
 
-    @registry.register
+    @registry.register(
+        params_model=SlackSearchMessagesParams,
+        result_model=SlackSearchMessagesResult,
+    )
     def slack_search_messages(query: str, channel: str | None = None) -> dict[str, Any]:
         """Search for messages across Slack.
         Optionally filter by channel name (with or without # prefix).

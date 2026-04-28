@@ -1,5 +1,6 @@
 """Unit tests for the ReAct agent loop."""
 
+import json
 from typing import Any
 
 import pytest
@@ -183,3 +184,36 @@ def test_unknown_tool_produces_tool_error(
     error_events = [e for e in events if e.type == "tool_error"]
     assert error_events
     assert "nonexistent_tool" in (error_events[0].error or "")
+
+
+def test_tool_error_is_sent_as_structured_json(
+    tmp_settings: Any, empty_registry: ToolRegistry
+) -> None:
+    class CapturingLLM(ScriptedLLMClient):
+        def __init__(self) -> None:
+            self.last_messages: list[dict[str, Any]] = []
+            super().__init__(
+                [
+                    LLMResponse(
+                        content=None,
+                        tool_calls=[ToolCall(id="tc1", name="missing_tool", args={})],
+                    ),
+                    LLMResponse(content="Recovered.", tool_calls=[]),
+                ]
+            )
+
+        def chat(self, messages: Any, tools: Any) -> LLMResponse:
+            self.last_messages = messages
+            return super().chat(messages, tools)
+
+    llm = CapturingLLM()
+    loop = AgentLoop(llm, empty_registry, tmp_settings)
+    events = _collect(loop, "do something")
+
+    tool_messages = [m for m in llm.last_messages if m.get("role") == "tool"]
+    assert tool_messages
+    payload = json.loads(tool_messages[-1]["content"])
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "unknown_tool"
+    assert "missing_tool" in payload["error"]["message"]
+    assert _final(events).content == "Recovered."

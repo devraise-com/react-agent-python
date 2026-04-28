@@ -84,8 +84,9 @@ def _tool_result_msg(tc: ToolCall, result: Any) -> dict[str, Any]:
     return {"role": "tool", "tool_call_id": tc.id, "content": content}
 
 
-def _tool_error_msg(tc: ToolCall, error: str) -> dict[str, Any]:
-    return {"role": "tool", "tool_call_id": tc.id, "content": f"Error: {error}"}
+def _tool_error_msg(tc: ToolCall, error: ToolError) -> dict[str, Any]:
+    payload = {"ok": False, "error": error.to_dict()}
+    return {"role": "tool", "tool_call_id": tc.id, "content": json.dumps(payload)}
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +165,7 @@ class AgentLoop:
                     logger.warning("tool_error", tool=tc.name, error=str(exc))
                     yield StepEvent(type="tool_error", name=tc.name, error=str(exc))
                     # Send error back to the LLM so it can recover
-                    messages.append(_tool_error_msg(tc, str(exc)))
+                    messages.append(_tool_error_msg(tc, exc))
 
         # Max steps exhausted
         yield StepEvent(type="final_answer", content="Max steps reached.")

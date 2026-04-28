@@ -3,13 +3,19 @@
 from typing import Any
 
 from src.mock_services.email_service import EmailService
+from src.tools.models import (
+    EmailSearchParams,
+    EmailSearchResult,
+    EmailSendParams,
+    EmailSendResult,
+)
 from src.tools.registry import ToolRegistry
 
 
 def register_email_tools(service: EmailService, registry: ToolRegistry) -> None:
     """Register all Email tools into the given registry."""
 
-    @registry.register
+    @registry.register(params_model=EmailSendParams, result_model=EmailSendResult)
     def email_send(
         to: list[str],
         subject: str,
@@ -22,7 +28,7 @@ def register_email_tools(service: EmailService, registry: ToolRegistry) -> None:
         """
         return service.send_email(to, subject, body, cc)
 
-    @registry.register
+    @registry.register(params_model=EmailSearchParams, result_model=EmailSearchResult)
     def email_search(query: str, folder: str = "inbox") -> dict[str, Any]:
         """Search emails by keyword (matches subject and body).
         folder must be one of: inbox, outbox, all.

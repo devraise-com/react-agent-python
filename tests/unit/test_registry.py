@@ -3,6 +3,7 @@
 from typing import Any
 
 import pytest
+from pydantic import BaseModel, ConfigDict
 
 from src.tools.base import ToolError
 from src.tools.registry import ToolRegistry
@@ -104,3 +105,43 @@ def test_optional_string_param_schema(registry: ToolRegistry) -> None:
     required = registry.schemas()[0]["function"]["parameters"]["required"]
     assert "query" in required
     assert "channel" not in required
+
+
+def test_dispatch_validates_params_model(registry: ToolRegistry) -> None:
+    class Params(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        text: str
+        repeat: int
+
+    class Result(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        ok: bool
+        output: str
+
+    @registry.register(params_model=Params, result_model=Result)
+    def echo(text: str, repeat: int) -> dict[str, Any]:
+        return {"ok": True, "output": text * repeat}
+
+    result = registry.dispatch("echo", {"text": "a", "repeat": 3})
+    assert result["output"] == "aaa"
+
+    with pytest.raises(ToolError, match="repeat"):
+        registry.dispatch("echo", {"text": "a", "repeat": "bad"})
+
+
+def test_dispatch_validates_result_model(registry: ToolRegistry) -> None:
+    class Params(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        value: str
+
+    class Result(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        ok: bool
+        output: str
+
+    @registry.register(params_model=Params, result_model=Result)
+    def broken(value: str) -> dict[str, Any]:
+        return {"ok": True, "wrong": value}
+
+    with pytest.raises(ToolError, match="output"):
+        registry.dispatch("broken", {"value": "x"})
