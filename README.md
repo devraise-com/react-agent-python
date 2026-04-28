@@ -89,11 +89,43 @@ MOCK_FORCE_ERROR=slack:rate_limit python agent.py
 # Available services:    slack | calendar | jira | email
 ```
 
+## Tracing (OpenTelemetry)
+
+```bash
+# JSONL traces in runtime/traces.jsonl (default)
+ENABLE_TRACING=true TRACING_EXPORTER=file python agent.py
+
+# Console spans
+ENABLE_TRACING=true TRACING_EXPORTER=console python agent.py
+
+# OTLP/HTTP exporter (Jaeger/Tempo/Collector)
+ENABLE_TRACING=true TRACING_EXPORTER=otlp \
+TRACING_OTLP_ENDPOINT=http://localhost:4318/v1/traces \
+python agent.py
+```
+
+Each run emits nested spans for `agent.task_run`, `agent.llm_turn`, and `agent.tool_call`.
+With `TRACING_EXPORTER=file`, the output is JSONL with **one object per trace**:
+`{"trace_id":"...","span_count":N,"spans":[...]}`.
+
 ## Type Checking
 
 ```bash
 mypy src/
 ```
+
+## Metrics Detection API
+
+The project includes detection helpers over `task_completed` audit events:
+
+- `get_success_rate`
+- `get_error_rate`
+- `get_p95_latency`
+- `get_avg_tokens_per_task`
+- `get_steps_per_task`
+- `get_tool_error_rate`
+
+Source: `src/agent/metrics.py`
 
 ## Project Structure
 
@@ -111,5 +143,6 @@ react-agent-python/
 ├── tests/
 │   ├── unit/                 # per-module unit tests
 │   └── integration/          # scenario A–D + service contract tests
-└── data/                     # runtime JSON state (git-ignored)
+├── data/                     # runtime JSON state (git-ignored)
+└── runtime/                  # runtime logs + audit events (git-ignored)
 ```

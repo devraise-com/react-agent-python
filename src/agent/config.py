@@ -24,9 +24,27 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
-    log_file: str = ""
+    log_file: str = "agent.log"
+    runtime_dir: Path = Path("runtime")
+    environment: str = "dev"
+    agent_version: str = "0.1.0"
+    session_id: str = ""
+    enable_audit_log: bool = True
+    audit_log_file: str = "audit_events.jsonl"
+
+    # OpenTelemetry tracing
+    enable_tracing: bool = False
+    tracing_service_name: str = "react-agent-python"
+    tracing_exporter: str = "file"  # file | console | otlp
+    tracing_file: str = "traces.jsonl"
+    tracing_otlp_endpoint: str = ""  # e.g. http://localhost:4318/v1/traces
 
     # Agent
     max_agent_steps: int = Field(default=20, gt=0)
     current_user: str = ""
     data_dir: Path = Path("data")
+
+    # Cost accounting (USD per 1M tokens)
+    cost_input_per_million_tokens: float = Field(default=5.0, ge=0.0)
+    cost_output_per_million_tokens: float = Field(default=15.0, ge=0.0)
+    cost_cached_input_per_million_tokens: float = Field(default=1.25, ge=0.0)

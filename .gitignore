@@ -30,6 +30,9 @@ coverage.xml
 # Runtime data (state files created by mock services)
 data/*.json
 
+# Runtime logs and audit events
+runtime/
+
 # Log files
 *.log
 

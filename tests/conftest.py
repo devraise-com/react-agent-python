@@ -51,6 +51,8 @@ def tmp_settings(tmp_path: Path) -> Settings:
         openai_api_key="test-key",
         openai_model="gpt-4o",
         data_dir=tmp_path,
+        runtime_dir=tmp_path,
+        log_file="",
         max_agent_steps=10,
     )
 

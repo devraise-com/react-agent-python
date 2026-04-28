@@ -10,7 +10,14 @@ import pytest
 from src.agent.llm_client import LLMError, LLMResponse, OpenAIClient, ToolCall
 
 
-def _make_completion(content: str | None, tool_calls: list[dict[str, Any]] | None = None) -> MagicMock:
+def _make_completion(
+    content: str | None,
+    tool_calls: list[dict[str, Any]] | None = None,
+    *,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    cached_tokens: int = 0,
+) -> MagicMock:
     """Build a mock openai ChatCompletion object."""
     message = MagicMock()
     message.content = content
@@ -31,6 +38,13 @@ def _make_completion(content: str | None, tool_calls: list[dict[str, Any]] | Non
 
     completion = MagicMock()
     completion.choices = [choice]
+    usage = MagicMock()
+    usage.prompt_tokens = prompt_tokens
+    usage.completion_tokens = completion_tokens
+    details = MagicMock()
+    details.cached_tokens = cached_tokens
+    usage.prompt_tokens_details = details
+    completion.usage = usage
     return completion
 
 
@@ -97,3 +111,19 @@ def test_rate_limit_retry_then_success(client: OpenAIClient) -> None:
 
     assert response.content == "ok"
     assert call_count == 2
+    assert response.retry_count == 1
+
+
+def test_usage_is_extracted(client: OpenAIClient) -> None:
+    completion = _make_completion(
+        "Done",
+        prompt_tokens=111,
+        completion_tokens=22,
+        cached_tokens=11,
+    )
+    with patch.object(client._client.chat.completions, "create", return_value=completion):
+        response = client.chat([{"role": "user", "content": "hi"}], [])
+
+    assert response.usage.input_tokens == 111
+    assert response.usage.output_tokens == 22
+    assert response.usage.cached_tokens == 11

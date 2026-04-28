@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from src.agent.llm_client import LLMError, LLMResponse, ToolCall
+from src.agent.llm_client import LLMError, LLMResponse, LLMUsage, ToolCall
 from src.agent.loop import AgentLoop, StepEvent
 from src.tools.registry import ToolRegistry
 from tests.conftest import ScriptedLLMClient
@@ -217,3 +217,68 @@ def test_tool_error_is_sent_as_structured_json(
     assert payload["error"]["code"] == "unknown_tool"
     assert "missing_tool" in payload["error"]["message"]
     assert _final(events).content == "Recovered."
+
+
+def test_events_include_task_and_trace_ids(
+    tmp_settings: Any, empty_registry: ToolRegistry
+) -> None:
+    llm = ScriptedLLMClient([LLMResponse(content="Hello!", tool_calls=[])])
+    loop = AgentLoop(llm, empty_registry, tmp_settings)
+    events = _collect(loop, "Hi")
+
+    task_ids = {e.task_id for e in events}
+    trace_ids = {e.trace_id for e in events}
+    assert len(task_ids) == 1
+    assert len(trace_ids) == 1
+    assert None not in task_ids
+    assert None not in trace_ids
+
+
+def test_task_completed_audit_event_contains_usage_and_cost(
+    tmp_settings: Any, empty_registry: ToolRegistry
+) -> None:
+    llm = ScriptedLLMClient(
+        [
+            LLMResponse(
+                content="Done.",
+                tool_calls=[],
+                usage=LLMUsage(input_tokens=1200, output_tokens=400, cached_tokens=200),
+            )
+        ]
+    )
+    loop = AgentLoop(llm, empty_registry, tmp_settings)
+    _collect(loop, "Hi")
+
+    audit_path = tmp_settings.runtime_dir / tmp_settings.audit_log_file
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    events = [json.loads(line) for line in lines if line.strip()]
+    completed = [e for e in events if e["event_type"] == "task_completed"]
+    assert completed
+    payload = completed[-1]["payload"]
+    assert payload["usage"]["input_tokens"] == 1200
+    assert payload["usage"]["output_tokens"] == 400
+    assert payload["usage"]["cached_tokens"] == 200
+    assert payload["usage"]["estimated_cost_usd"] > 0.0
+
+
+def test_outcome_is_success_after_tool_error_recovery(
+    tmp_settings: Any, full_registry: ToolRegistry
+) -> None:
+    """outcome must be 'success' when LLM recovers from a tool error."""
+    bad_tc = ToolCall(id="tc1", name="missing_tool", args={})
+    recovery = LLMResponse(content="All done.", tool_calls=[])
+    llm = ScriptedLLMClient(
+        [
+            LLMResponse(content=None, tool_calls=[bad_tc]),
+            recovery,
+        ]
+    )
+    loop = AgentLoop(llm, full_registry, tmp_settings)
+    _collect(loop, "Do something")
+
+    audit_path = tmp_settings.runtime_dir / tmp_settings.audit_log_file
+    lines = audit_path.read_text(encoding="utf-8").strip().splitlines()
+    events = [json.loads(line) for line in lines if line.strip()]
+    completed = [e for e in events if e["event_type"] == "task_completed"]
+    assert completed
+    assert completed[-1]["payload"]["outcome"] == "success"

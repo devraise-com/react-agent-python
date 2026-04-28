@@ -7,7 +7,7 @@ from typing import Any
 
 import openai
 from tenacity import (
-    retry,
+    Retrying,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
@@ -24,11 +24,20 @@ class ToolCall:
 
 
 @dataclass
+class LLMUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+
+
+@dataclass
 class LLMResponse:
     """Typed wrapper around an OpenAI chat completion response."""
 
     content: str | None  # None when the model goes straight to tool_calls
     tool_calls: list[ToolCall] = field(default_factory=list)
+    usage: LLMUsage = field(default_factory=LLMUsage)
+    retry_count: int = 0
 
 
 class LLMError(Exception):
@@ -52,25 +61,33 @@ class OpenAIClient(LLMClient):
         self._client = openai.OpenAI(api_key=api_key)
         self._model = model
 
-    @retry(
-        retry=retry_if_exception_type((openai.RateLimitError, openai.APITimeoutError)),
-        wait=wait_exponential(multiplier=1, min=2, max=30),
-        stop=stop_after_attempt(4),
-        reraise=True,
-    )
     def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> LLMResponse:
+        attempts = 0
         try:
-            kwargs: dict[str, Any] = {"model": self._model, "messages": messages}
-            if tools:
-                kwargs["tools"] = tools
-                kwargs["tool_choice"] = "auto"
+            retrying = Retrying(
+                retry=retry_if_exception_type(
+                    (openai.RateLimitError, openai.APITimeoutError)
+                ),
+                wait=wait_exponential(multiplier=1, min=2, max=30),
+                stop=stop_after_attempt(4),
+                reraise=True,
+            )
+            response: Any
+            for attempt in retrying:
+                with attempt:
+                    attempts += 1
+                    kwargs: dict[str, Any] = {"model": self._model, "messages": messages}
+                    if tools:
+                        kwargs["tools"] = tools
+                        kwargs["tool_choice"] = "auto"
+                    response = self._client.chat.completions.create(**kwargs)
 
-            response = self._client.chat.completions.create(**kwargs)
             message = response.choices[0].message
+            usage = self._extract_usage(response)
 
             tool_calls: list[ToolCall] = []
             if message.tool_calls:
@@ -83,9 +100,35 @@ class OpenAIClient(LLMClient):
                         )
                     )
 
-            return LLMResponse(content=message.content, tool_calls=tool_calls)
+            return LLMResponse(
+                content=message.content,
+                tool_calls=tool_calls,
+                usage=usage,
+                retry_count=max(attempts - 1, 0),
+            )
 
-        except (openai.RateLimitError, openai.APITimeoutError):
-            raise  # let tenacity handle retries
         except openai.OpenAIError as exc:
             raise LLMError(str(exc)) from exc
+
+    def _extract_usage(self, response: Any) -> LLMUsage:
+        usage_obj = getattr(response, "usage", None)
+        if usage_obj is None:
+            return LLMUsage()
+        input_tokens = int(getattr(usage_obj, "prompt_tokens", 0) or 0)
+        output_tokens = int(getattr(usage_obj, "completion_tokens", 0) or 0)
+
+        # SDK shape may vary by API version; handle both object and dict-like payloads.
+        cached_tokens = 0
+        details = getattr(usage_obj, "prompt_tokens_details", None)
+        if details is not None:
+            cached_tokens = int(getattr(details, "cached_tokens", 0) or 0)
+        elif isinstance(usage_obj, dict):
+            details_obj = usage_obj.get("prompt_tokens_details", {})
+            if isinstance(details_obj, dict):
+                cached_tokens = int(details_obj.get("cached_tokens", 0) or 0)
+
+        return LLMUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cached_tokens=cached_tokens,
+        )

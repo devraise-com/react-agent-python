@@ -5,6 +5,9 @@ description = "CLI-based ReAct AI agent for workplace automation"
 requires-python = ">=3.10"
 dependencies = [
     "openai>=1.30.0",
+    "opentelemetry-api>=1.26.0",
+    "opentelemetry-sdk>=1.26.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.26.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",

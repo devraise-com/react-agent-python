@@ -1,5 +1,7 @@
 """Rich-based interactive CLI for the ReAct agent."""
 
+from pathlib import Path
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.pretty import Pretty
@@ -53,7 +55,10 @@ class AgentCLI:
     """Interactive REPL that renders ReAct step events with rich formatting."""
 
     def __init__(self, settings: Settings) -> None:
-        configure_logging(settings.log_level, settings.log_file)
+        log_file = settings.log_file
+        if log_file and not Path(log_file).is_absolute():
+            log_file = str(settings.runtime_dir / log_file)
+        configure_logging(settings.log_level, log_file)
         self._loop = _build_loop(settings)
         self._console = Console()
 
